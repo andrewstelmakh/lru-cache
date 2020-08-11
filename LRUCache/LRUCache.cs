@@ -1,19 +1,21 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace LRUCache
 {
-    public class LruCache<T>
+    public class LruCache<T> : IEnumerable<T>
     {
         private readonly int _capacity;
-        private readonly Dictionary<string, Node<T>> _map;
+        private readonly ConcurrentDictionary<string, Node<T>> _map;
         private Node<T> _head;
         private Node<T> _tail;
 
         public LruCache(int capacity)
         {
             _capacity = capacity;
-            _map = new Dictionary<string, Node<T>>(capacity);
+            _map = new ConcurrentDictionary<string, Node<T>>(Environment.ProcessorCount, capacity);
         }
 
         public void Put(string key, T value)
@@ -26,15 +28,22 @@ namespace LRUCache
             if (!_map.ContainsKey(key))
             {
                 var node = new Node<T> { Key = key, Value = value };
-                _map.Add(key, node);
+                _map.TryAdd(key, node);
                 
                 AddNodeToTheHead(node);
+            }
+            else
+            {
+                var node = _map[key];
+                node.Value = value;
+                
+                MoveNodeToTheHead(node);
             }
         }
 
         private void RemoveOldestNode()
         {
-            _map.Remove(_tail.Key);
+            _map.TryRemove(_tail.Key, out var _);
             
             var tailPrev = _tail.Previous;
             tailPrev.Next = null;
@@ -70,7 +79,7 @@ namespace LRUCache
                 previousNode.Next = nextNode;
             }
 
-            if (node.Equals(_tail))
+            if (node.Equals(_tail) && !node.Equals(_head))
             {
                 var prevTail = _tail.Previous;
                 prevTail.Next = null;
@@ -93,6 +102,21 @@ namespace LRUCache
             }
             
             throw new KeyNotFoundException();
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            var current = _head;
+            while (current != null)
+            {
+                yield return current.Value;
+                current = current.Next;
+            }      
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
         }
     }
 }
